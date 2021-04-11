@@ -57,9 +57,11 @@ func (feed *VDV452) parseStop(x10p *x10parser.X10Parser) (err error) {
 		s.Stop_Type = int8(feed.getInt("STOP_TYPE", r, x10p.Cols))
 		s.Stop_Abbr = feed.getStr("STOP_ABBR", r, x10p.Cols)
 		s.Stop_Desc = feed.getStr("STOP_DESC", r, x10p.Cols)
-		s.Longitude = float32(feed.getFloat("POINT_LONGITUDE", r, x10p.Cols))
-		s.Latitude = float32(feed.getFloat("POINT_LATITUDE", r, x10p.Cols))
-		fmt.Println(r)
+		s.Longitude = float32(feed.getFloat("POINT_LONGITUDE", r, x10p.Cols) / 10000000.0)
+		s.Latitude = float32(feed.getFloat("POINT_LATITUDE", r, x10p.Cols) / 10000000.0)
+
+		fmt.Println(s)
+
 		feed.Stops[uint64(s.Point_Type)*7000000+uint64(s.Point_No)] = s
 	}
 	return nil
@@ -67,7 +69,8 @@ func (feed *VDV452) parseStop(x10p *x10parser.X10Parser) (err error) {
 
 func (feed *VDV452) getStr(name string, row []string, cols map[string]int) string {
 	var idx int
-	if _, ok := cols[name]; !ok {
+	var ok bool
+	if idx, ok = cols[name]; !ok {
 		panic(fmt.Errorf("Missing column %s", name))
 	}
 	if idx >= len(row) {
@@ -78,7 +81,8 @@ func (feed *VDV452) getStr(name string, row []string, cols map[string]int) strin
 
 func (feed *VDV452) getFloat(name string, row []string, cols map[string]int) float64 {
 	var idx int
-	if _, ok := cols[name]; !ok {
+	var ok bool
+	if idx, ok = cols[name]; !ok {
 		panic(fmt.Errorf("Missing column %s", name))
 	}
 	if idx >= len(row) {
@@ -98,7 +102,8 @@ func (feed *VDV452) getFloat(name string, row []string, cols map[string]int) flo
 
 func (feed *VDV452) getInt(name string, row []string, cols map[string]int) int {
 	var idx int
-	if _, ok := cols[name]; !ok {
+	var ok bool
+	if idx, ok = cols[name]; !ok {
 		panic(fmt.Errorf("Missing column %s", name))
 	}
 	if idx >= len(row) {
