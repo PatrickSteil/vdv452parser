@@ -8,6 +8,7 @@ package vdv452
 
 type Line struct {
 	LineNo    int
+	OpDepNo   int
 	RouteAbbr string
 	Direction int
 	LineAbbr  string

@@ -17,15 +17,25 @@ import (
 )
 
 type VDV452 struct {
-	Stops map[uint64]*vdv452.Stop
-	Lines map[string]*vdv452.Line
+	Stops        map[uint64]*vdv452.Stop
+	Lines        map[string]*vdv452.Line
+	TravelTimes  map[uint64]map[uint64]int
+	Journeys     map[uint64]*vdv452.Journey
+	DayTypes     map[uint64]*vdv452.DayType
+	Destinations map[uint64]*vdv452.Destination
+	VehicleTypes map[uint64]*vdv452.VehicleType
 }
 
 // NewVDV452 creates a new, empty VDV452 feed
 func NewVDV452() *VDV452 {
 	g := VDV452{
-		Stops: make(map[uint64]*vdv452.Stop),
-		Lines: make(map[string]*vdv452.Line),
+		Stops:        make(map[uint64]*vdv452.Stop),
+		Lines:        make(map[string]*vdv452.Line),
+		TravelTimes:  make(map[uint64]map[uint64]int),
+		Journeys:     make(map[uint64]*vdv452.Journey),
+		DayTypes:     make(map[uint64]*vdv452.DayType),
+		Destinations: make(map[uint64]*vdv452.Destination),
+		VehicleTypes: make(map[uint64]*vdv452.VehicleType),
 	}
 	return &g
 }
@@ -51,6 +61,26 @@ func (feed *VDV452) Parse(path string) error {
 			if x10p.TblName == "LINE" {
 				feed.parseLine(&x10p)
 			}
+
+			if x10p.TblName == "TRAVEL_TIME" {
+				feed.parseTravelTime(&x10p)
+			}
+
+			if x10p.TblName == "JOURNEY" {
+				feed.parseJourney(&x10p)
+			}
+
+			if x10p.TblName == "PERIOD" {
+				feed.parsePeriod(&x10p)
+			}
+
+			if x10p.TblName == "DESTINATION" {
+				feed.parseDestination(&x10p)
+			}
+
+			if x10p.TblName == "VEHICLE_TYPE" {
+				feed.parseVehicleType(&x10p)
+			}
 		}
 	}
 
@@ -74,6 +104,7 @@ func (feed *VDV452) parseLine(x10p *x10parser.X10Parser) (err error) {
 		l.RouteAbbr = feed.getStr("ROUTE_ABBR", r, x10p.Cols)
 		l.Direction = int(feed.getInt("DIRECTION", r, x10p.Cols))
 		l.LineAbbr = feed.getStr("LINE_ABBR", r, x10p.Cols)
+		l.OpDepNo = feed.getInt("OP_DEP_NO", r, x10p.Cols)
 		l.LineDesc = feed.getStr("LINE_DESC", r, x10p.Cols)
 		l.RouteType = int(feed.getInt("ROUTE_TYPE", r, x10p.Cols))
 	}
@@ -110,6 +141,67 @@ func (feed *VDV452) parseRouteSequence(x10p *x10parser.X10Parser) (err error) {
 	return nil
 }
 
+func (feed *VDV452) parseTravelTime(x10p *x10parser.X10Parser) (err error) {
+	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
+		opDepNo := uint64(feed.getInt("OP_DEP_NO", r, x10p.Cols))
+		tGroupNo := uint64(feed.getInt("TIMING_GROUP_NO", r, x10p.Cols))
+		fromPointType := uint64(feed.getInt("POINT_TYPE", r, x10p.Cols))
+		fromPointNo := uint64(feed.getInt("POINT_NO", r, x10p.Cols))
+		toPointType := uint64(feed.getInt("TO_POINT_TYPE", r, x10p.Cols))
+		toPointNo := uint64(feed.getInt("TO_POINT_NO", r, x10p.Cols))
+		t := feed.getInt("TRAVEL_TIME", r, x10p.Cols)
+
+		tGroup := opDepNo*1000000000 + tGroupNo
+		ft := fromPointType*100000000000000 + fromPointNo*100000000 + toPointType*1000000 + toPointNo
+
+		if _, ok := feed.TravelTimes[tGroup]; !ok {
+			feed.TravelTimes[tGroup] = make(map[uint64]int, 0)
+		}
+		feed.TravelTimes[tGroup][ft] = t
+	}
+	return nil
+}
+
+func (feed *VDV452) parseJourney(x10p *x10parser.X10Parser) (err error) {
+	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
+		j := new(vdv452.Journey)
+		j.JourneyNo = uint64(feed.getInt("JOURNEY_NO", r, x10p.Cols))
+		j.DepartureTime = (feed.getInt("DEPARTURE_TIME", r, x10p.Cols))
+		j.LineNo = (feed.getInt("LINE_NO", r, x10p.Cols))
+		j.RouteAbbr = (feed.getStr("ROUTE_ABBR", r, x10p.Cols))
+		j.DayTypeNo = (feed.getInt("DAY_TYPE_NO", r, x10p.Cols))
+		j.JourneyType = (feed.getInt("JOURNEY_TYPE_NO", r, x10p.Cols))
+		j.TimingGroupNo = (feed.getInt("TIMING_GROUP_NO", r, x10p.Cols))
+		// j.TrainNo = (feed.getInt("TRAIN_NO", r, x10p.Cols))
+
+		feed.Journeys[j.JourneyNo] = j
+	}
+	return nil
+}
+
+func (feed *VDV452) parseDestination(x10p *x10parser.X10Parser) (err error) {
+	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
+		d := new(vdv452.Destination)
+		d.DestNo = uint64(feed.getInt("DEST_NO", r, x10p.Cols))
+		d.DestBriefText = (feed.getStr("DEST_BRIEF_TEXT", r, x10p.Cols))
+		d.DestSideText = (feed.getStr("DEST_SIDE_TEXT", r, x10p.Cols))
+		d.DestFrontText = (feed.getStr("DEST_FRONT_TEXT", r, x10p.Cols))
+		feed.Destinations[d.DestNo] = d
+	}
+	return nil
+}
+
+func (feed *VDV452) parseVehicleType(x10p *x10parser.X10Parser) (err error) {
+	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
+		v := new(vdv452.VehicleType)
+		v.VhTypeNo = uint64(feed.getInt("VH_TYPE_NO", r, x10p.Cols))
+		v.VhTypeDesc = (feed.getStr("VH_TYPE_DESC", r, x10p.Cols))
+		v.VhTypeAbbr = (feed.getStr("VH_TYPE_ABBR", r, x10p.Cols))
+		feed.VehicleTypes[v.VhTypeNo] = v
+	}
+	return nil
+}
+
 func (feed *VDV452) parseStop(x10p *x10parser.X10Parser) (err error) {
 	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
 		s := new(vdv452.Stop)
@@ -124,6 +216,23 @@ func (feed *VDV452) parseStop(x10p *x10parser.X10Parser) (err error) {
 		s.Latitude = float32(feed.getFloat("POINT_LATITUDE", r, x10p.Cols) / 10000000.0)
 
 		feed.Stops[uint64(s.Point_Type)*7000000+uint64(s.Point_No)] = s
+	}
+	return nil
+}
+
+func (feed *VDV452) parsePeriod(x10p *x10parser.X10Parser) (err error) {
+	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
+		var dt *vdv452.DayType
+		dayTypeId := uint64(feed.getInt("DAY_TYPE_NO", r, x10p.Cols))
+		opDay := uint64(feed.getInt("OPERATING_DAY", r, x10p.Cols))
+		if dayType, ok := feed.DayTypes[dayTypeId]; !ok {
+			dt = new(vdv452.DayType)
+			dt.OperatingDays = make(map[uint64]vdv452.Void)
+			feed.DayTypes[dayTypeId] = dt
+		} else {
+			dt = dayType
+		}
+		dt.OperatingDays[opDay] = struct{}{}
 	}
 	return nil
 }
