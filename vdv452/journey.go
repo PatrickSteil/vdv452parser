@@ -10,6 +10,7 @@ type Journey struct {
 	JourneyNo     uint64
 	DepartureTime int
 	LineNo        int
+	BlockNo       int
 	DayTypeNo     int
 	JourneyType   int
 	TimingGroupNo int

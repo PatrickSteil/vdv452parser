@@ -6,9 +6,8 @@
 
 package vdv452
 
-type VehicleType struct {
-	VhTypeNo       uint64
-	VhTypeDesc     string
-	VhTypeAbbr     string
-	VhTypeSpecSeat int
+type Company struct {
+	CompanyNo        int
+	CompanyAbbr      string
+	BusinessAreaDesc string
 }
