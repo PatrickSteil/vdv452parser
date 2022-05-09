@@ -17,6 +17,67 @@ import (
 	"strings"
 )
 
+var TRANS = map[string]string{
+	"POINT_TYPE":      "ONR_TYP_NR",
+	"POINT_NO":        "ORT_NR",
+	"POINT_DESC":      "ORT_NAME",
+	"STOP_NO":         "ORT_REF_ORT",
+	"STOP_TYPE":       "ORT_REF_ORT_TYP",
+	"STOP_ABBR":       "ORT_REF_ORT_KUERZEL",
+	"STOP_DESC":       "ORT_REF_ORT_NAME",
+	"POINT_LATITUDE":  "ORT_POS_LAENGE",
+	"POINT_LONGITUDE": "ORT_POS_HOEHE",
+
+	"JOURNEY_NO":      "FRT_FID",
+	"DEPARTURE_TIME":  "FRT_START",
+	"LINE_NO":         "LI_NR",
+	"ROUTE_ABBR":      "STR_LI_VAR",
+	"DAY_TYPE_NO":     "TAGESART_NR",
+	"JOURNEY_TYPE_NO": "FAHRTART_NR",
+	"TIMING_GROUP_NO": "FGR_NR",
+	"BLOCK_NO":        "UM_UID",
+
+	"OPERATING_DAY": "BETRIEBSTAG",
+
+	"SEQUENCE_NO":  "LI_LFD_NR",
+	"DEST_NO":      "ZNR_NR",
+	"LINE_NODE":    "LI_KNOTEN",
+	"PRODUCTIVE":   "PRODUKTIV",
+	"NO_BOARDING":  "EINSTEIGEVERBOT",
+	"NO_ALIGHTING": "AUSSTEIGEVERBOT",
+	"REQUEST_STOP": "BEDARFSHALT",
+
+	"DIRECTION":  "LI_RI_NR",
+	"LINE_ABBR":  "LI_KUERZEL",
+	"OP_DEP_NO":  "BEREICH_NR",
+	"LINE_DESC":  "LIDNAME",
+	"ROUTE_TYPE": "ROUTEN_ART",
+
+	"OP_DEP_ABBR":        "STR_BEREICH",
+	"OP_DEP_DESC":        "BEREICH_TEXT",
+	"COMPANY":            "UNTERNEHMEN",
+	"COMPANY_ABBR":       "ABK_UNTERNEHMEN",
+	"BUSINESS_AREA_DESC": "BETRIEBSGEBIET_BEZ",
+	"VH_TYPE_NO":         "FZG_TYP_NR",
+	"VEHICLE_NO":         "FZG_NR",
+	"VEHICLE_TYPE":       "FZG_TYP_NR",
+
+	"VH_TYPE_DESC":      "FZG_TYP_TEXT",
+	"VH_TYPE_ABBR":      "STR_FZG_TYP",
+	"VH_TYPE_SPEC_SEAT": "FZG_TYP_SITZ",
+
+	"DEST_BRIEF_TEXT": "FAHRERKURZTEXT",
+	"DEST_SIDE_TEXT":  "SEITENTEXT",
+	"DEST_FRONT_TEXT": "ZNR_TEXT",
+
+	"TO_POINT_TYPE":   "SEL_ZIEL_TYP",
+	"TO_POINT_NO":     "SEL_ZIEL",
+	"FROM_POINT_TYPE": "ONR_TYPE_NR",
+	"FROM_POINT_NO":   "ORT_NR",
+	"LINK_DISTANCE":   "SEL_LAENGE",
+	"TRAVEL_TIME":     "SEL_FZT",
+}
+
 type VDV452 struct {
 	Stops                map[uint64]*vdv452.Stop
 	Lines                map[string]*vdv452.Line
@@ -71,7 +132,15 @@ func (feed *VDV452) Parse(path string) error {
 				feed.parseStop(&x10p)
 			}
 
+			if x10p.TblName == "REC_ORT" {
+				feed.parseStop(&x10p)
+			}
+
 			if x10p.TblName == "ROUTE_SEQUENCE" {
+				feed.parseRouteSequence(&x10p)
+			}
+
+			if x10p.TblName == "LID_VERLAUF" {
 				feed.parseRouteSequence(&x10p)
 			}
 
@@ -79,7 +148,15 @@ func (feed *VDV452) Parse(path string) error {
 				feed.parseLine(&x10p)
 			}
 
+			if x10p.TblName == "REC_LID" {
+				feed.parseLine(&x10p)
+			}
+
 			if x10p.TblName == "TRAVEL_TIME" {
+				feed.parseTravelTime(&x10p)
+			}
+
+			if x10p.TblName == "SEL_FZT_FELD" {
 				feed.parseTravelTime(&x10p)
 			}
 
@@ -87,7 +164,15 @@ func (feed *VDV452) Parse(path string) error {
 				feed.parseWaitTime(&x10p)
 			}
 
+			if x10p.TblName == "ORT_HZTF" {
+				feed.parseWaitTime(&x10p)
+			}
+
 			if x10p.TblName == "JOURNEY" {
+				feed.parseJourney(&x10p)
+			}
+
+			if x10p.TblName == "REC_FRT" {
 				feed.parseJourney(&x10p)
 			}
 
@@ -95,7 +180,15 @@ func (feed *VDV452) Parse(path string) error {
 				feed.parsePeriod(&x10p)
 			}
 
+			if x10p.TblName == "FIRMENKALENDER" {
+				feed.parsePeriod(&x10p)
+			}
+
 			if x10p.TblName == "DESTINATION" {
+				feed.parseDestination(&x10p)
+			}
+
+			if x10p.TblName == "REC_ZNR" {
 				feed.parseDestination(&x10p)
 			}
 
@@ -103,7 +196,15 @@ func (feed *VDV452) Parse(path string) error {
 				feed.parseVehicleType(&x10p)
 			}
 
+			if x10p.TblName == "MENGE_FZG_TYP" {
+				feed.parseVehicleType(&x10p)
+			}
+
 			if x10p.TblName == "VEHICLE" {
+				feed.parseVehicle(&x10p)
+			}
+
+			if x10p.TblName == "FAHRZEUG" {
 				feed.parseVehicle(&x10p)
 			}
 
@@ -111,11 +212,23 @@ func (feed *VDV452) Parse(path string) error {
 				feed.parseCompany(&x10p)
 			}
 
+			if x10p.TblName == "ZUL_VERKEHRSBETRIEB" {
+				feed.parseCompany(&x10p)
+			}
+
 			if x10p.TblName == "BLOCK" {
 				feed.parseBlock(&x10p)
 			}
 
+			if x10p.TblName == "REC_UMLAUF" {
+				feed.parseBlock(&x10p)
+			}
+
 			if x10p.TblName == "OPERATING_DEPARTMENT" {
+				feed.parseOpDep(&x10p)
+			}
+
+			if x10p.TblName == "MENGE_BEREICH" {
 				feed.parseOpDep(&x10p)
 			}
 		}
@@ -129,7 +242,8 @@ func (feed *VDV452) parseLine(x10p *x10parser.X10Parser) (err error) {
 		lineNo := feed.getInt("LINE_NO", r, x10p.Cols)
 		routeAbbr := feed.getStr("ROUTE_ABBR", r, x10p.Cols)
 
-		lineId := fmt.Sprintf("%06d", lineNo) + routeAbbr
+		lineId := fmt.Sprintf("%06d", lineNo) + "." + routeAbbr
+		fmt.Println("Parsed line", lineId)
 		var l *vdv452.Line
 		if line, ok := feed.Lines[lineId]; !ok {
 			l = new(vdv452.Line)
@@ -153,7 +267,7 @@ func (feed *VDV452) parseRouteSequence(x10p *x10parser.X10Parser) (err error) {
 		lineNo := feed.getInt("LINE_NO", r, x10p.Cols)
 		routeAbbr := feed.getStr("ROUTE_ABBR", r, x10p.Cols)
 
-		lineId := fmt.Sprintf("%06d", lineNo) + routeAbbr
+		lineId := fmt.Sprintf("%06d", lineNo) + "." + routeAbbr
 		var l *vdv452.Line
 		if line, ok := feed.Lines[lineId]; !ok {
 			l = new(vdv452.Line)
@@ -174,9 +288,11 @@ func (feed *VDV452) parseRouteSequence(x10p *x10parser.X10Parser) (err error) {
 		rs.RequestStop = feed.getBool("REQUEST_STOP", r, x10p.Cols, false, false)
 
 		l.Sequence = append(l.Sequence, rs)
+
 	}
 
-	for _, l := range feed.Lines {
+	for id, l := range feed.Lines {
+		fmt.Println(id, len(l.Sequence))
 		sort.Sort(seqAsc(l.Sequence))
 	}
 	return nil
@@ -352,8 +468,15 @@ func (feed *VDV452) parsePeriod(x10p *x10parser.X10Parser) (err error) {
 }
 
 func (feed *VDV452) getStr(name string, row []string, cols map[string]int) string {
-	var idx int
 	var ok bool
+	if _, ok = cols[name]; !ok {
+		if trans, ok := TRANS[name]; ok {
+			// try german translation
+			name = trans
+		}
+	}
+
+	var idx int
 	if idx, ok = cols[name]; !ok {
 		panic(fmt.Errorf("Missing column %s", name))
 	}
@@ -366,6 +489,12 @@ func (feed *VDV452) getStr(name string, row []string, cols map[string]int) strin
 func (feed *VDV452) getFloat(name string, row []string, cols map[string]int) float64 {
 	var idx int
 	var ok bool
+	if _, ok = cols[name]; !ok {
+		if trans, ok := TRANS[name]; ok {
+			// try german translation
+			name = trans
+		}
+	}
 	if idx, ok = cols[name]; !ok {
 		panic(fmt.Errorf("Missing column %s", name))
 	}
@@ -387,6 +516,12 @@ func (feed *VDV452) getFloat(name string, row []string, cols map[string]int) flo
 func (feed *VDV452) getBool(name string, row []string, cols map[string]int, req bool, def bool) bool {
 	var idx int
 	var ok bool
+	if _, ok = cols[name]; !ok {
+		if trans, ok := TRANS[name]; ok {
+			// try german translation
+			name = trans
+		}
+	}
 	if idx, ok = cols[name]; !ok {
 		if !req {
 			return def
@@ -423,6 +558,12 @@ func (feed *VDV452) getBool(name string, row []string, cols map[string]int, req 
 func (feed *VDV452) getInt(name string, row []string, cols map[string]int) int {
 	var idx int
 	var ok bool
+	if _, ok = cols[name]; !ok {
+		if trans, ok := TRANS[name]; ok {
+			// try german translation
+			name = trans
+		}
+	}
 	if idx, ok = cols[name]; !ok {
 		panic(fmt.Errorf("Missing column %s", name))
 	}
