@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"github.com/pebbe/go-proj-4/proj/v5"
 	"patrickbrosi.de/vdv452parser/vdv452"
 	"patrickbrosi.de/x10parser"
 	"sort"
@@ -22,6 +23,7 @@ var TRANS = map[string]string{
 	"POINT_NO":        "ORT_NR",
 	"POINT_DESC":      "ORT_NAME",
 	"STOP_NO":         "ORT_REF_ORT",
+	"STOP_POINT_NO":         "HALTEPUNKT_NR",
 	"STOP_TYPE":       "ORT_REF_ORT_TYP",
 	"STOP_ABBR":       "ORT_REF_ORT_KUERZEL",
 	"STOP_DESC":       "ORT_REF_ORT_NAME",
@@ -38,6 +40,8 @@ var TRANS = map[string]string{
 	"BLOCK_NO":        "UM_UID",
 
 	"OPERATING_DAY": "BETRIEBSTAG",
+
+	"WAIT_TIME" : "HP_HZT",
 
 	"SEQUENCE_NO":  "LI_LFD_NR",
 	"DEST_NO":      "ZNR_NR",
@@ -127,6 +131,14 @@ func (feed *VDV452) Parse(path string) error {
 			fullpath := filepath.Join(path, item.Name())
 			x10p := x10parser.X10Parser{}
 			e = x10p.Open(fullpath)
+
+			if x10p.TblName == "STOP_POINT" {
+				feed.parseStopPoint(&x10p)
+			}
+
+			if x10p.TblName == "REC_HP" {
+				feed.parseStopPoint(&x10p)
+			}
 
 			if x10p.TblName == "STOP" {
 				feed.parseStop(&x10p)
@@ -243,7 +255,7 @@ func (feed *VDV452) parseLine(x10p *x10parser.X10Parser) (err error) {
 		routeAbbr := feed.getStr("ROUTE_ABBR", r, x10p.Cols)
 
 		lineId := fmt.Sprintf("%06d", lineNo) + "." + routeAbbr
-		fmt.Println("Parsed line", lineId)
+
 		var l *vdv452.Line
 		if line, ok := feed.Lines[lineId]; !ok {
 			l = new(vdv452.Line)
@@ -426,6 +438,39 @@ func (feed *VDV452) parseVehicle(x10p *x10parser.X10Parser) (err error) {
 	return nil
 }
 
+func (feed *VDV452) parseStopPoint(x10p *x10parser.X10Parser) (err error) {
+	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
+		s := new(vdv452.Stop)
+		s.Point_Type = int8(feed.getInt("POINT_TYPE", r, x10p.Cols))
+		s.Point_No = uint(feed.getInt("POINT_NO", r, x10p.Cols))
+		s.Stop_Point_No = uint(feed.getInt("STOP_POINT_NO", r, x10p.Cols))
+
+		// this is needed for DIVA2VDV export
+		if feed.hasField("HP_POS_X", r, x10p.Cols) && feed.hasField("HP_POS_Y", r, x10p.Cols) {
+			x := float64(feed.getInt("HP_POS_X", r, x10p.Cols))
+			y := float64(feed.getInt("HP_POS_Y", r, x10p.Cols))
+
+			if x == 0 && y == 0 {
+				s.Longitude = float32(0)
+				s.Latitude = float32(0)
+			} else {
+				// assume gauss-krueger, corresponds to REAL option in DIVA2VDV
+				wgs, _ :=  proj.NewProj("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_def")
+				gk, _ :=  proj.NewProj("+proj=tmerc +lat_0=0 +lon_0=9 +k=1 +x_0=3500000 +y_0=0 +ellps=bessel +towgs84=584.8,67.0,400.3,0.105,0.013,-2.378,10.29 +units=m +no_defs")
+
+				lon, lat, _ := proj.Transform2(gk, wgs, x, y)
+
+				s.Longitude = float32(proj.RadToDeg(lon))
+				s.Latitude = float32(proj.RadToDeg(lat))
+			}
+		}
+
+
+		feed.Stops[uint64(s.Point_Type)*7000000+uint64(s.Point_No)] = s
+	}
+	return nil
+}
+
 func (feed *VDV452) parseStop(x10p *x10parser.X10Parser) (err error) {
 	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
 		s := new(vdv452.Stop)
@@ -437,14 +482,27 @@ func (feed *VDV452) parseStop(x10p *x10parser.X10Parser) (err error) {
 		s.Stop_Abbr = feed.getStr("STOP_ABBR", r, x10p.Cols)
 		s.Stop_Desc = feed.getStr("STOP_DESC", r, x10p.Cols)
 
-		lat := feed.getInt("POINT_LATITUDE", r, x10p.Cols)
-		lon := feed.getInt("POINT_LONGITUDE", r, x10p.Cols)
 
-		s.Longitude = float32(lon/10000000) + float32((lon%10000000/100000))/60.0 + (float32(lon%10000000%100000)/1000.0)/3600.0
+		if feed.hasField("POINT_LATITUDE", r, x10p.Cols) && feed.hasField("POINT_LONGITUDE", r, x10p.Cols) {
+			lat := feed.getInt("POINT_LATITUDE", r, x10p.Cols)
+			lon := feed.getInt("POINT_LONGITUDE", r, x10p.Cols)
 
-		s.Latitude = float32(lat/10000000) + float32((lat%10000000/100000))/60.0 + (float32(lat%10000000%100000)/1000.0)/3600.0
+			s.Longitude = float32(lon/10000000) + float32((lon%10000000/100000))/60.0 + (float32(lon%10000000%100000)/1000.0)/3600.0
 
-		feed.Stops[uint64(s.Point_Type)*7000000+uint64(s.Point_No)] = s
+			s.Latitude = float32(lat/10000000) + float32((lat%10000000/100000))/60.0 + (float32(lat%10000000%100000)/1000.0)/3600.0
+		}
+
+		if sEx, ok := feed.Stops[uint64(s.Point_Type)*7000000+uint64(s.Point_No)]; ok {
+			sEx.Point_Type = s.Point_Type
+			sEx.Point_No = s.Point_No
+			sEx.Point_Desc = s.Point_Desc
+			sEx.Stop_No =s.Stop_No
+			sEx.Stop_Type = s.Stop_Type
+			sEx.Stop_Abbr = s.Stop_Abbr
+			sEx.Stop_Desc = s.Stop_Desc
+		} else {
+			feed.Stops[uint64(s.Point_Type)*7000000+uint64(s.Point_No)] = s
+		}
 	}
 	return nil
 }
@@ -553,6 +611,25 @@ func (feed *VDV452) getBool(name string, row []string, cols map[string]int, req 
 		}
 		panic(fmt.Errorf("Expected required field '%s'", name))
 	}
+}
+
+func (feed *VDV452) hasField(name string, row []string, cols map[string]int) bool {
+	var idx int
+	var ok bool
+	if _, ok = cols[name]; !ok {
+		if trans, ok := TRANS[name]; ok {
+			// try german translation
+			name = trans
+		}
+	}
+	if idx, ok = cols[name]; !ok {
+		return false;
+	}
+	if idx >= len(row) {
+		return false;
+	}
+
+	return true;
 }
 
 func (feed *VDV452) getInt(name string, row []string, cols map[string]int) int {

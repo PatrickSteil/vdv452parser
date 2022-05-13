@@ -21,10 +21,12 @@ type Stop struct {
 	Point_No              uint
 	Point_Desc            string
 	Stop_No               uint
+	Stop_Point_No               uint
 	Stop_Type             int8
 	Stop_Long_No          int
 	Stop_Abbr             string
 	Stop_Desc             string
+	Stop_Point_Desc             string
 	Zone_Cell_No          int
 	Longitude             float32
 	Latitude              float32
