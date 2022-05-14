@@ -18,12 +18,41 @@ import (
 	"strings"
 )
 
+var VEH_TYPES = map[string]int{
+	// trams
+	"Straßenbahn" : 0,
+	"Strab" : 0,
+	"StraBa": 0,
+	"Tram" : 0,
+
+	// subways
+	"U" : 1,
+	"U-Bahn" : 1,
+	"U1" : 1,
+	"U2" : 1,
+	"U3" : 1,
+	"U4" : 1,
+	"U5" :1,
+
+	// busses
+	"Kleinbus" : 3,
+	"Normalbus" : 3,
+	"Midibus" : 3,
+	"Gelenkbus" : 3,
+	"Niederflurbus" : 3,
+	"Bus" : 3,
+	"Omnibus" : 3,
+	"Ruftaxi" : 3,
+	"Taxi" : 3,
+	"Sammeltaxi" : 3,
+}
+
 var TRANS = map[string]string{
 	"POINT_TYPE":      "ONR_TYP_NR",
 	"POINT_NO":        "ORT_NR",
 	"POINT_DESC":      "ORT_NAME",
 	"STOP_NO":         "ORT_REF_ORT",
-	"STOP_POINT_NO":         "HALTEPUNKT_NR",
+	"STOP_POINT_NO":   "HALTEPUNKT_NR",
 	"STOP_TYPE":       "ORT_REF_ORT_TYP",
 	"STOP_ABBR":       "ORT_REF_ORT_KUERZEL",
 	"STOP_DESC":       "ORT_REF_ORT_NAME",
@@ -95,6 +124,8 @@ type VDV452 struct {
 	Companies            map[uint64]*vdv452.Company
 	OperatingDepartments map[uint64]*vdv452.OperatingDepartment
 	Blocks               map[uint64]*vdv452.Block
+    WGSProj              *proj.Proj
+    DIVAProj             *proj.Proj
 }
 
 type seqAsc []vdv452.RouteSequence
@@ -104,7 +135,7 @@ func (v seqAsc) Swap(i, j int)      { v[i], v[j] = v[j], v[i] }
 func (v seqAsc) Less(i, j int) bool { return v[i].SequenceNo < v[j].SequenceNo }
 
 // NewVDV452 creates a new, empty VDV452 feed
-func NewVDV452() *VDV452 {
+func NewVDV452(divaProj string) *VDV452 {
 	g := VDV452{
 		Stops:                make(map[uint64]*vdv452.Stop),
 		Lines:                make(map[string]*vdv452.Line),
@@ -119,6 +150,9 @@ func NewVDV452() *VDV452 {
 		OperatingDepartments: make(map[uint64]*vdv452.OperatingDepartment),
 		Blocks:               make(map[uint64]*vdv452.Block),
 	}
+
+    g.WGSProj, _ = proj.NewProj("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_def")
+    g.DIVAProj, _ = proj.NewProj(divaProj)
 	return &g
 }
 
@@ -294,7 +328,7 @@ func (feed *VDV452) parseRouteSequence(x10p *x10parser.X10Parser) (err error) {
 		rs.PointNo = int(feed.getInt("POINT_NO", r, x10p.Cols))
 		rs.DestNo = int(feed.getInt("DEST_NO", r, x10p.Cols))
 		rs.LineNode = feed.getBool("LINE_NODE", r, x10p.Cols, true, false)
-		// rs.Productive = feed.getBool("PRODUCTIVE", r, x10p.Cols, )
+		rs.Productive = feed.getBool("PRODUCTIVE", r, x10p.Cols, false, true )
 		rs.NoBoarding = feed.getBool("NO_BOARDING", r, x10p.Cols, false, false)
 		rs.NoAlighting = feed.getBool("NO_ALIGHTING", r, x10p.Cols, false, false)
 		rs.RequestStop = feed.getBool("REQUEST_STOP", r, x10p.Cols, false, false)
@@ -303,8 +337,7 @@ func (feed *VDV452) parseRouteSequence(x10p *x10parser.X10Parser) (err error) {
 
 	}
 
-	for id, l := range feed.Lines {
-		fmt.Println(id, len(l.Sequence))
+	for _, l := range feed.Lines {
 		sort.Sort(seqAsc(l.Sequence))
 	}
 	return nil
@@ -386,6 +419,9 @@ func (feed *VDV452) parseVehicleType(x10p *x10parser.X10Parser) (err error) {
 		v.VhTypeDesc = (feed.getStr("VH_TYPE_DESC", r, x10p.Cols))
 		v.VhTypeAbbr = (feed.getStr("VH_TYPE_ABBR", r, x10p.Cols))
 		v.VhTypeSpecSeat = (feed.getInt("VH_TYPE_SPEC_SEAT", r, x10p.Cols))
+
+		v.GuessedGtfsType = feed.guessGtfsType(v.VhTypeDesc)
+
 		feed.VehicleTypes[v.VhTypeNo] = v
 	}
 	return nil
@@ -455,11 +491,7 @@ func (feed *VDV452) parseStopPoint(x10p *x10parser.X10Parser) (err error) {
 				s.Latitude = float32(0)
 			} else {
 				// assume gauss-krueger, corresponds to REAL option in DIVA2VDV
-				wgs, _ :=  proj.NewProj("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_def")
-				gk, _ :=  proj.NewProj("+proj=tmerc +lat_0=0 +lon_0=9 +k=1 +x_0=3500000 +y_0=0 +ellps=bessel +towgs84=584.8,67.0,400.3,0.105,0.013,-2.378,10.29 +units=m +no_defs")
-
-				lon, lat, _ := proj.Transform2(gk, wgs, x, y)
-
+				lon, lat, _ := proj.Transform2(feed.DIVAProj, feed.WGSProj, x, y)
 				s.Longitude = float32(proj.RadToDeg(lon))
 				s.Latitude = float32(proj.RadToDeg(lat))
 			}
@@ -656,4 +688,24 @@ func (feed *VDV452) getInt(name string, row []string, cols map[string]int) int {
 	} else {
 		panic(fmt.Errorf("Expected required field '%s'", name))
 	}
+}
+
+func (feed *VDV452) guessGtfsType(vn string) int {
+	vnn := strings.ReplaceAll(vn, "-", " ")
+	vnn = strings.ReplaceAll(vnn, "|", " ")
+	vnn = strings.ReplaceAll(vnn, "_", " ")
+	vnn = strings.ReplaceAll(vnn, "(", " ")
+	vnn = strings.ReplaceAll(vnn, ")", " ")
+	vnn = strings.ReplaceAll(vnn, "[", " ")
+	vnn = strings.ReplaceAll(vnn, "]", " ")
+
+	for _, tok := range strings.Split(vnn, " ") {
+		if mot, ok := VEH_TYPES[tok]; ok {
+			return mot
+		}
+	}
+
+	fmt.Printf("Couldn't find vehicle type for vehicle '%s', defaulting to 0 (tram)\n", vn)
+
+	return 0;
 }

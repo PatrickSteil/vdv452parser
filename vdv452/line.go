@@ -23,7 +23,7 @@ type RouteSequence struct {
 	PointNo     int
 	DestNo      int
 	LineNode    bool
-	Productive  int
+	Productive  bool
 	NoBoarding  bool
 	NoAlighting bool
 	RequestStop bool

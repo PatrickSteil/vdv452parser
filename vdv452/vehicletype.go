@@ -11,4 +11,5 @@ type VehicleType struct {
 	VhTypeDesc     string
 	VhTypeAbbr     string
 	VhTypeSpecSeat int
+	GuessedGtfsType int
 }
