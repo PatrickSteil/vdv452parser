@@ -45,9 +45,17 @@ var VEH_TYPES = map[string]int{
 	"Ruftaxi" : 3,
 	"Taxi" : 3,
 	"Sammeltaxi" : 3,
+	"Solobus" : 3,
+	"Taxibus" : 3,
+	"Schulbus" : 3,
+	"Schul-Solobus" : 3,
+	"Ablöse-PKW" : 3,
 }
 
 var TRANS = map[string]string{
+	"POINT_ON_LINK_SERIAL_NO": "ZP_LFD_NR",
+	"POINT_TO_LINK_NO": "ZP_ONR",
+	"POINT_TO_LINK_TYPE": "ZP_TYP",
 	"POINT_TYPE":      "ONR_TYP_NR",
 	"POINT_NO":        "ORT_NR",
 	"POINT_DESC":      "ORT_NAME",
@@ -56,8 +64,8 @@ var TRANS = map[string]string{
 	"STOP_TYPE":       "ORT_REF_ORT_TYP",
 	"STOP_ABBR":       "ORT_REF_ORT_KUERZEL",
 	"STOP_DESC":       "ORT_REF_ORT_NAME",
-	"POINT_LATITUDE":  "ORT_POS_LAENGE",
-	"POINT_LONGITUDE": "ORT_POS_HOEHE",
+	"POINT_LATITUDE":  "ORT_POS_BREITE",
+	"POINT_LONGITUDE": "ORT_POS_LAENGE",
 
 	"JOURNEY_NO":      "FRT_FID",
 	"DEPARTURE_TIME":  "FRT_START",
@@ -124,6 +132,7 @@ type VDV452 struct {
 	Companies            map[uint64]*vdv452.Company
 	OperatingDepartments map[uint64]*vdv452.OperatingDepartment
 	Blocks               map[uint64]*vdv452.Block
+	Shapes               map[uint64][]vdv452.ShapePoint
     WGSProj              *proj.Proj
     DIVAProj             *proj.Proj
 }
@@ -149,6 +158,7 @@ func NewVDV452(divaProj string) *VDV452 {
 		Companies:            make(map[uint64]*vdv452.Company),
 		OperatingDepartments: make(map[uint64]*vdv452.OperatingDepartment),
 		Blocks:               make(map[uint64]*vdv452.Block),
+		Shapes:               make(map[uint64][]vdv452.ShapePoint),
 	}
 
     g.WGSProj, _ = proj.NewProj("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_def")
@@ -204,6 +214,14 @@ func (feed *VDV452) Parse(path string) error {
 
 			if x10p.TblName == "SEL_FZT_FELD" {
 				feed.parseTravelTime(&x10p)
+			}
+
+			if x10p.TblName == "POINT_ON_LINK" {
+				feed.parseShape(&x10p)
+			}
+
+			if x10p.TblName == "REC_SEL_ZP" {
+				feed.parseShape(&x10p)
 			}
 
 			if x10p.TblName == "WAIT_TIME" {
@@ -382,6 +400,27 @@ func (feed *VDV452) parseTravelTime(x10p *x10parser.X10Parser) (err error) {
 	return nil
 }
 
+func (feed *VDV452) parseShape(x10p *x10parser.X10Parser) (err error) {
+	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
+		opDepNo := uint64(feed.getInt("OP_DEP_NO", r, x10p.Cols))
+		fromPointType := uint64(feed.getInt("POINT_TYPE", r, x10p.Cols))
+		fromPointNo := uint64(feed.getInt("POINT_NO", r, x10p.Cols))
+		toPointType := uint64(feed.getInt("TO_POINT_TYPE", r, x10p.Cols))
+		toPointNo := uint64(feed.getInt("TO_POINT_NO", r, x10p.Cols))
+		pointNo := uint64(feed.getInt("POINT_TO_LINK_NO", r, x10p.Cols))
+		pointType := uint64(feed.getInt("POINT_TO_LINK_TYPE", r, x10p.Cols))
+		order := uint64(feed.getInt("POINT_ON_LINK_SERIAL_NO", r, x10p.Cols))
+
+		ft := opDepNo *100000000000000000 +  fromPointType*100000000000000 + fromPointNo*100000000 + toPointType*1000000 + toPointNo
+
+		if _, ok := feed.Shapes[ft]; !ok {
+			feed.Shapes[ft] = make([]vdv452.ShapePoint, 0)
+		}
+		feed.Shapes[ft] = append(feed.Shapes[ft], vdv452.ShapePoint{pointType, pointNo, order});
+	}
+	return nil
+}
+
 func (feed *VDV452) parseJourney(x10p *x10parser.X10Parser) (err error) {
 	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
 		j := new(vdv452.Journey)
@@ -404,9 +443,9 @@ func (feed *VDV452) parseDestination(x10p *x10parser.X10Parser) (err error) {
 	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
 		d := new(vdv452.Destination)
 		d.DestNo = uint64(feed.getInt("DEST_NO", r, x10p.Cols))
-		d.DestBriefText = (feed.getStr("DEST_BRIEF_TEXT", r, x10p.Cols))
-		d.DestSideText = (feed.getStr("DEST_SIDE_TEXT", r, x10p.Cols))
-		d.DestFrontText = (feed.getStr("DEST_FRONT_TEXT", r, x10p.Cols))
+		d.DestBriefText = strings.Replace(feed.getStr("DEST_BRIEF_TEXT", r, x10p.Cols), "\\n", " ", -1)
+		d.DestSideText = strings.Replace(feed.getStr("DEST_SIDE_TEXT", r, x10p.Cols), "\\n", " ", -1)
+		d.DestFrontText = strings.Replace(feed.getStr("DEST_FRONT_TEXT", r, x10p.Cols), "\\n", " ", -1)
 		feed.Destinations[d.DestNo] = d
 	}
 	return nil
@@ -532,6 +571,8 @@ func (feed *VDV452) parseStop(x10p *x10parser.X10Parser) (err error) {
 			sEx.Stop_Type = s.Stop_Type
 			sEx.Stop_Abbr = s.Stop_Abbr
 			sEx.Stop_Desc = s.Stop_Desc
+			sEx.Longitude = s.Longitude
+			sEx.Latitude = s.Latitude
 		} else {
 			feed.Stops[uint64(s.Point_Type)*7000000+uint64(s.Point_No)] = s
 		}
