@@ -431,7 +431,12 @@ func (feed *VDV452) parseJourney(x10p *x10parser.X10Parser) (err error) {
 		j.DayTypeNo = (feed.getInt("DAY_TYPE_NO", r, x10p.Cols))
 		j.JourneyType = (feed.getInt("JOURNEY_TYPE_NO", r, x10p.Cols))
 		j.TimingGroupNo = (feed.getInt("TIMING_GROUP_NO", r, x10p.Cols))
-		j.BlockNo = (feed.getInt("BLOCK_NO", r, x10p.Cols))
+
+		if (feed.getStr("BLOCK_NO", r, x10p.Cols) == "") {
+			j.BlockNo = -1
+		} else {
+			j.BlockNo = (feed.getInt("BLOCK_NO", r, x10p.Cols))
+		}
 		// j.TrainNo = (feed.getInt("TRAIN_NO", r, x10p.Cols))
 
 		feed.Journeys[j.JourneyNo] = j
