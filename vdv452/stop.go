@@ -33,5 +33,5 @@ type Stop struct {
 	Elevation             int
 	Stop_No_Local         int
 	Stop_No_National      int
-	Stop_No_International int
+	Stop_No_International string
 }

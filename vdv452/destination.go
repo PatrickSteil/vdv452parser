@@ -11,4 +11,5 @@ type Destination struct {
 	DestBriefText string
 	DestSideText  string
 	DestFrontText string
+	Code string
 }

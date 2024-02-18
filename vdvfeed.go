@@ -120,6 +120,9 @@ var TRANS = map[string]string{
 }
 
 type VDV452 struct {
+	BaseVersion int
+	Validity int
+	BaseVersionText string
 	Stops                map[uint64]*vdv452.Stop
 	Lines                map[string]*vdv452.Line
 	TravelTimes          map[uint64]map[uint64]int
@@ -133,6 +136,7 @@ type VDV452 struct {
 	OperatingDepartments map[uint64]*vdv452.OperatingDepartment
 	Blocks               map[uint64]*vdv452.Block
 	Shapes               map[uint64][]vdv452.ShapePoint
+	Network              map[uint16]map[uint64]int
     WGSProj              *proj.Proj
     DIVAProj             *proj.Proj
 }
@@ -146,6 +150,8 @@ func (v seqAsc) Less(i, j int) bool { return v[i].SequenceNo < v[j].SequenceNo }
 // NewVDV452 creates a new, empty VDV452 feed
 func NewVDV452(divaProj string) *VDV452 {
 	g := VDV452{
+		BaseVersion: 19000000,
+		Validity: 19000000,
 		Stops:                make(map[uint64]*vdv452.Stop),
 		Lines:                make(map[string]*vdv452.Line),
 		TravelTimes:          make(map[uint64]map[uint64]int),
@@ -159,6 +165,7 @@ func NewVDV452(divaProj string) *VDV452 {
 		OperatingDepartments: make(map[uint64]*vdv452.OperatingDepartment),
 		Blocks:               make(map[uint64]*vdv452.Block),
 		Shapes:               make(map[uint64][]vdv452.ShapePoint),
+		Network:              make(map[uint16]map[uint64]int),
 	}
 
     g.WGSProj, _ = proj.NewProj("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_def")
@@ -433,7 +440,7 @@ func (feed *VDV452) parseJourney(x10p *x10parser.X10Parser) (err error) {
 		j.TimingGroupNo = (feed.getInt("TIMING_GROUP_NO", r, x10p.Cols))
 
 		if (feed.getStr("BLOCK_NO", r, x10p.Cols) == "") {
-			j.BlockNo = -1
+			j.BlockNo = 0
 		} else {
 			j.BlockNo = (feed.getInt("BLOCK_NO", r, x10p.Cols))
 		}

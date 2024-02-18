@@ -10,6 +10,7 @@ type Line struct {
 	LineNo    int
 	OpDepNo   int
 	RouteAbbr string
+	RouteNo int
 	Direction int
 	LineAbbr  string
 	LineDesc  string
