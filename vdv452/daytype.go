@@ -11,4 +11,5 @@ type Void struct{}
 type DayType struct {
 	DayTypeNo     int
 	OperatingDays map[uint64]Void
+	DayTypeDesc string
 }

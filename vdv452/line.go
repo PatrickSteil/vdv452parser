@@ -1,4 +1,4 @@
-// Copyright 2015 geOps
+// Copyright 2023 Patrick Brosi
 // Authors: patrick.brosi@geops.de
 //
 // Use of this source code is governed by a GPL v2

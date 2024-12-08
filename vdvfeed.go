@@ -79,6 +79,7 @@ var TRANS = map[string]string{
 	"OPERATING_DAY": "BETRIEBSTAG",
 
 	"WAIT_TIME" : "HP_HZT",
+	"JOURNEY_WAIT_TIME" : "FRT_HZT_ZEIT",
 
 	"SEQUENCE_NO":  "LI_LFD_NR",
 	"DEST_NO":      "ZNR_NR",
@@ -127,6 +128,7 @@ type VDV452 struct {
 	Lines                map[string]*vdv452.Line
 	TravelTimes          map[uint64]map[uint64]int
 	WaitTimes            map[uint64]map[uint64]int
+	JourneyWaitTimes     map[uint64]map[uint64]int
 	Journeys             map[uint64]*vdv452.Journey
 	DayTypes             map[uint64]*vdv452.DayType
 	Destinations         map[uint64]*vdv452.Destination
@@ -137,8 +139,8 @@ type VDV452 struct {
 	Blocks               map[uint64]*vdv452.Block
 	Shapes               map[uint64][]vdv452.ShapePoint
 	Network              map[uint16]map[uint64]int
-    WGSProj              *proj.Proj
-    DIVAProj             *proj.Proj
+	WGSProj              *proj.Proj
+	DIVAProj             *proj.Proj
 }
 
 type seqAsc []vdv452.RouteSequence
@@ -156,6 +158,7 @@ func NewVDV452(divaProj string) *VDV452 {
 		Lines:                make(map[string]*vdv452.Line),
 		TravelTimes:          make(map[uint64]map[uint64]int),
 		WaitTimes:            make(map[uint64]map[uint64]int),
+		JourneyWaitTimes:            make(map[uint64]map[uint64]int),
 		Journeys:             make(map[uint64]*vdv452.Journey),
 		DayTypes:             make(map[uint64]*vdv452.DayType),
 		Destinations:         make(map[uint64]*vdv452.Destination),
@@ -168,8 +171,8 @@ func NewVDV452(divaProj string) *VDV452 {
 		Network:              make(map[uint16]map[uint64]int),
 	}
 
-    g.WGSProj, _ = proj.NewProj("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_def")
-    g.DIVAProj, _ = proj.NewProj(divaProj)
+	g.WGSProj, _ = proj.NewProj("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_def")
+	g.DIVAProj, _ = proj.NewProj(divaProj)
 	return &g
 }
 
@@ -245,6 +248,14 @@ func (feed *VDV452) Parse(path string) error {
 
 			if x10p.TblName == "REC_FRT" {
 				feed.parseJourney(&x10p)
+			}
+
+			if x10p.TblName == "REC_FRT_HZT" {
+				feed.parseTripWaits(&x10p)
+			}
+
+			if x10p.TblName == "JOURNEY_WAIT_TIME" {
+				feed.parseTripWaits(&x10p)
 			}
 
 			if x10p.TblName == "PERIOD" {
@@ -364,6 +375,23 @@ func (feed *VDV452) parseRouteSequence(x10p *x10parser.X10Parser) (err error) {
 
 	for _, l := range feed.Lines {
 		sort.Sort(seqAsc(l.Sequence))
+	}
+	return nil
+}
+
+func (feed *VDV452) parseTripWaits(x10p *x10parser.X10Parser) (err error) {
+	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
+		trip := uint64(feed.getInt("JOURNEY_NO", r, x10p.Cols))
+		pointType := uint64(feed.getInt("POINT_TYPE", r, x10p.Cols))
+		pointNo := uint64(feed.getInt("POINT_NO", r, x10p.Cols))
+		t := feed.getInt("JOURNEY_WAIT_TIME", r, x10p.Cols)
+
+		ft := pointType*1000000 + pointNo
+
+		if _, ok := feed.JourneyWaitTimes[trip]; !ok {
+			feed.JourneyWaitTimes[trip] = make(map[uint64]int, 0)
+		}
+		feed.JourneyWaitTimes[trip][ft] = t
 	}
 	return nil
 }
