@@ -11,8 +11,8 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"github.com/pebbe/go-proj-4/proj/v5"
-	"patrickbrosi.de/vdv452parser/vdv452"
-	"patrickbrosi.de/x10parser"
+	"github.com/patrickbr/vdv452parser/vdv452"
+	"github.com/patrickbr/x10parser"
 	"sort"
 	"strconv"
 	"strings"
@@ -141,6 +141,7 @@ type VDV452 struct {
 	Network              map[uint16]map[uint64]int
 	WGSProj              *proj.Proj
 	DIVAProj             *proj.Proj
+	DefaultMOT			int
 }
 
 type seqAsc []vdv452.RouteSequence
@@ -150,7 +151,7 @@ func (v seqAsc) Swap(i, j int)      { v[i], v[j] = v[j], v[i] }
 func (v seqAsc) Less(i, j int) bool { return v[i].SequenceNo < v[j].SequenceNo }
 
 // NewVDV452 creates a new, empty VDV452 feed
-func NewVDV452(divaProj string) *VDV452 {
+func NewVDV452(divaProj string, defaultMot int) *VDV452 {
 	g := VDV452{
 		BaseVersion: 19000000,
 		Validity: 19000000,
@@ -169,6 +170,7 @@ func NewVDV452(divaProj string) *VDV452 {
 		Blocks:               make(map[uint64]*vdv452.Block),
 		Shapes:               make(map[uint64][]vdv452.ShapePoint),
 		Network:              make(map[uint16]map[uint64]int),
+		DefaultMOT:           defaultMot,
 	}
 
 	g.WGSProj, _ = proj.NewProj("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_def")
@@ -786,7 +788,7 @@ func (feed *VDV452) guessGtfsType(vn string) int {
 		}
 	}
 
-	fmt.Printf("Couldn't find vehicle type for vehicle '%s', defaulting to 0 (tram)\n", vn)
+	fmt.Printf("Couldn't find vehicle type for vehicle '%s', defaulting to %d\n", vn, feed.DefaultMOT)
 
 	return 0;
 }
