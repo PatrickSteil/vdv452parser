@@ -529,9 +529,16 @@ func (feed *VDV452) parseVehicleType(x10p *x10parser.X10Parser) (err error) {
 	for r, _ := x10p.Row(); len(r) > 0; r, _ = x10p.Row() {
 		v := new(vdv452.VehicleType)
 		v.VhTypeNo = uint64(feed.getInt("VH_TYPE_NO", r, x10p.Cols))
-		v.VhTypeDesc = (feed.getStr("VH_TYPE_DESC", r, x10p.Cols))
-		v.VhTypeAbbr = (feed.getStr("VH_TYPE_ABBR", r, x10p.Cols))
-		v.VhTypeSpecSeat = (feed.getInt("VH_TYPE_SPEC_SEAT", r, x10p.Cols))
+
+		if feed.hasField("VH_TYPE_DESC", r, x10p.Cols) {
+			v.VhTypeDesc = feed.getStr("VH_TYPE_DESC", r, x10p.Cols)
+		}
+		if feed.hasField("VH_TYPE_ABBR", r, x10p.Cols) {
+			v.VhTypeAbbr = feed.getStr("VH_TYPE_ABBR", r, x10p.Cols)
+		}
+		if feed.hasField("VH_TYPE_SPEC_SEAT", r, x10p.Cols) {
+			v.VhTypeSpecSeat = feed.getInt("VH_TYPE_SPEC_SEAT", r, x10p.Cols)
+		}
 
 		v.GuessedGtfsType = feed.guessGtfsType(v.VhTypeDesc)
 
@@ -567,7 +574,11 @@ func (feed *VDV452) parseBlock(x10p *x10parser.X10Parser) (err error) {
 		bl := new(vdv452.Block)
 		bl.DayTypeNo = (feed.getInt("DAY_TYPE_NO", r, x10p.Cols))
 		bl.BlockNo = (feed.getInt("BLOCK_NO", r, x10p.Cols))
-		bl.VhTypeNo = (feed.getInt("VH_TYPE_NO", r, x10p.Cols))
+		if feed.hasField("VH_TYPE_NO", r, x10p.Cols) {
+			bl.VhTypeNo = feed.getInt("VH_TYPE_NO", r, x10p.Cols)
+		} else {
+			bl.VhTypeNo = 0
+		}
 
 		key := BlockKey{bl.DayTypeNo, bl.BlockNo}
 		feed.Blocks[key] = bl
