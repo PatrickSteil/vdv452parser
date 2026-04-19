@@ -10,62 +10,63 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
-	"github.com/pebbe/go-proj-4/proj/v5"
-	"github.com/patrickbr/vdv452parser/vdv452"
-	"github.com/patrickbr/x10parser"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/patrickbr/vdv452parser/vdv452"
+	"github.com/patrickbr/x10parser"
+	"github.com/pebbe/go-proj-4/proj/v5"
 )
 
 var VEH_TYPES = map[string]int{
 	// trams
-	"Straßenbahn" : 0,
-	"Strab" : 0,
-	"StraBa": 0,
-	"Tram" : 0,
+	"Straßenbahn": 0,
+	"Strab":       0,
+	"StraBa":      0,
+	"Tram":        0,
 
 	// subways
-	"U" : 1,
-	"U-Bahn" : 1,
-	"U1" : 1,
-	"U2" : 1,
-	"U3" : 1,
-	"U4" : 1,
-	"U5" :1,
+	"U":      1,
+	"U-Bahn": 1,
+	"U1":     1,
+	"U2":     1,
+	"U3":     1,
+	"U4":     1,
+	"U5":     1,
 
 	// busses
-	"Kleinbus" : 3,
-	"Normalbus" : 3,
-	"Midibus" : 3,
-	"Gelenkbus" : 3,
-	"Niederflurbus" : 3,
-	"Bus" : 3,
-	"Omnibus" : 3,
-	"Ruftaxi" : 3,
-	"Taxi" : 3,
-	"Sammeltaxi" : 3,
-	"Solobus" : 3,
-	"Taxibus" : 3,
-	"Schulbus" : 3,
-	"Schul-Solobus" : 3,
-	"Ablöse-PKW" : 3,
+	"Kleinbus":      3,
+	"Normalbus":     3,
+	"Midibus":       3,
+	"Gelenkbus":     3,
+	"Niederflurbus": 3,
+	"Bus":           3,
+	"Omnibus":       3,
+	"Ruftaxi":       3,
+	"Taxi":          3,
+	"Sammeltaxi":    3,
+	"Solobus":       3,
+	"Taxibus":       3,
+	"Schulbus":      3,
+	"Schul-Solobus": 3,
+	"Ablöse-PKW":    3,
 }
 
 var TRANS = map[string]string{
 	"POINT_ON_LINK_SERIAL_NO": "ZP_LFD_NR",
-	"POINT_TO_LINK_NO": "ZP_ONR",
-	"POINT_TO_LINK_TYPE": "ZP_TYP",
-	"POINT_TYPE":      "ONR_TYP_NR",
-	"POINT_NO":        "ORT_NR",
-	"POINT_DESC":      "ORT_NAME",
-	"STOP_NO":         "ORT_REF_ORT",
-	"STOP_POINT_NO":   "HALTEPUNKT_NR",
-	"STOP_TYPE":       "ORT_REF_ORT_TYP",
-	"STOP_ABBR":       "ORT_REF_ORT_KUERZEL",
-	"STOP_DESC":       "ORT_REF_ORT_NAME",
-	"POINT_LATITUDE":  "ORT_POS_BREITE",
-	"POINT_LONGITUDE": "ORT_POS_LAENGE",
+	"POINT_TO_LINK_NO":        "ZP_ONR",
+	"POINT_TO_LINK_TYPE":      "ZP_TYP",
+	"POINT_TYPE":              "ONR_TYP_NR",
+	"POINT_NO":                "ORT_NR",
+	"POINT_DESC":              "ORT_NAME",
+	"STOP_NO":                 "ORT_REF_ORT",
+	"STOP_POINT_NO":           "HALTEPUNKT_NR",
+	"STOP_TYPE":               "ORT_REF_ORT_TYP",
+	"STOP_ABBR":               "ORT_REF_ORT_KUERZEL",
+	"STOP_DESC":               "ORT_REF_ORT_NAME",
+	"POINT_LATITUDE":          "ORT_POS_BREITE",
+	"POINT_LONGITUDE":         "ORT_POS_LAENGE",
 
 	"JOURNEY_NO":      "FRT_FID",
 	"DEPARTURE_TIME":  "FRT_START",
@@ -78,8 +79,8 @@ var TRANS = map[string]string{
 
 	"OPERATING_DAY": "BETRIEBSTAG",
 
-	"WAIT_TIME" : "HP_HZT",
-	"JOURNEY_WAIT_TIME" : "FRT_HZT_ZEIT",
+	"WAIT_TIME":         "HP_HZT",
+	"JOURNEY_WAIT_TIME": "FRT_HZT_ZEIT",
 
 	"SEQUENCE_NO":  "LI_LFD_NR",
 	"DEST_NO":      "ZNR_NR",
@@ -120,13 +121,38 @@ var TRANS = map[string]string{
 	"TRAVEL_TIME":     "SEL_FZT",
 }
 
+type LinkKey struct {
+	OpDepNo       uint64
+	FromPointType uint64
+	FromPointNo   uint64
+	ToPointType   uint64
+	ToPointNo     uint64
+}
+
+type BlockKey struct {
+	DayTypeNo int
+	BlockNo   int
+}
+
+type TravelTimeGroup struct {
+	OpDepNo  uint64
+	TGroupNo uint64
+}
+
+type TravelTimeLeg struct {
+	FromPointType uint64
+	FromPointNo   uint64
+	ToPointType   uint64
+	ToPointNo     uint64
+}
+
 type VDV452 struct {
-	BaseVersion int
-	Validity int
-	BaseVersionText string
+	BaseVersion          int
+	Validity             int
+	BaseVersionText      string
 	Stops                map[uint64]*vdv452.Stop
 	Lines                map[string]*vdv452.Line
-	TravelTimes          map[uint64]map[uint64]int
+	TravelTimes          map[TravelTimeGroup]map[TravelTimeLeg]int
 	WaitTimes            map[uint64]map[uint64]int
 	JourneyWaitTimes     map[uint64]map[uint64]int
 	Journeys             map[uint64]*vdv452.Journey
@@ -136,12 +162,12 @@ type VDV452 struct {
 	Vehicles             map[uint64]*vdv452.Vehicle
 	Companies            map[uint64]*vdv452.Company
 	OperatingDepartments map[uint64]*vdv452.OperatingDepartment
-	Blocks               map[uint64]*vdv452.Block
-	Shapes               map[uint64][]vdv452.ShapePoint
+	Blocks               map[BlockKey]*vdv452.Block
+	Shapes               map[LinkKey][]vdv452.ShapePoint
 	Network              map[uint16]map[uint64]int
 	WGSProj              *proj.Proj
 	DIVAProj             *proj.Proj
-	DefaultMOT			int
+	DefaultMOT           int
 }
 
 type seqAsc []vdv452.RouteSequence
@@ -153,13 +179,13 @@ func (v seqAsc) Less(i, j int) bool { return v[i].SequenceNo < v[j].SequenceNo }
 // NewVDV452 creates a new, empty VDV452 feed
 func NewVDV452(divaProj string, defaultMot int) *VDV452 {
 	g := VDV452{
-		BaseVersion: 19000000,
-		Validity: 19000000,
+		BaseVersion:          19000000,
+		Validity:             19000000,
 		Stops:                make(map[uint64]*vdv452.Stop),
 		Lines:                make(map[string]*vdv452.Line),
-		TravelTimes:          make(map[uint64]map[uint64]int),
+		TravelTimes:          make(map[TravelTimeGroup]map[TravelTimeLeg]int),
 		WaitTimes:            make(map[uint64]map[uint64]int),
-		JourneyWaitTimes:            make(map[uint64]map[uint64]int),
+		JourneyWaitTimes:     make(map[uint64]map[uint64]int),
 		Journeys:             make(map[uint64]*vdv452.Journey),
 		DayTypes:             make(map[uint64]*vdv452.DayType),
 		Destinations:         make(map[uint64]*vdv452.Destination),
@@ -167,8 +193,8 @@ func NewVDV452(divaProj string, defaultMot int) *VDV452 {
 		Vehicles:             make(map[uint64]*vdv452.Vehicle),
 		Companies:            make(map[uint64]*vdv452.Company),
 		OperatingDepartments: make(map[uint64]*vdv452.OperatingDepartment),
-		Blocks:               make(map[uint64]*vdv452.Block),
-		Shapes:               make(map[uint64][]vdv452.ShapePoint),
+		Blocks:               make(map[BlockKey]*vdv452.Block),
+		Shapes:               make(map[LinkKey][]vdv452.ShapePoint),
 		Network:              make(map[uint16]map[uint64]int),
 		DefaultMOT:           defaultMot,
 	}
@@ -366,7 +392,7 @@ func (feed *VDV452) parseRouteSequence(x10p *x10parser.X10Parser) (err error) {
 		rs.PointNo = int(feed.getInt("POINT_NO", r, x10p.Cols))
 		rs.DestNo = int(feed.getInt("DEST_NO", r, x10p.Cols))
 		rs.LineNode = feed.getBool("LINE_NODE", r, x10p.Cols, true, false)
-		rs.Productive = feed.getBool("PRODUCTIVE", r, x10p.Cols, false, true )
+		rs.Productive = feed.getBool("PRODUCTIVE", r, x10p.Cols, false, true)
 		rs.NoBoarding = feed.getBool("NO_BOARDING", r, x10p.Cols, false, false)
 		rs.NoAlighting = feed.getBool("NO_ALIGHTING", r, x10p.Cols, false, false)
 		rs.RequestStop = feed.getBool("REQUEST_STOP", r, x10p.Cols, false, false)
@@ -426,13 +452,13 @@ func (feed *VDV452) parseTravelTime(x10p *x10parser.X10Parser) (err error) {
 		toPointNo := uint64(feed.getInt("TO_POINT_NO", r, x10p.Cols))
 		t := feed.getInt("TRAVEL_TIME", r, x10p.Cols)
 
-		tGroup := opDepNo*1000000000 + tGroupNo
-		ft := fromPointType*100000000000000 + fromPointNo*100000000 + toPointType*1000000 + toPointNo
+		group := TravelTimeGroup{opDepNo, tGroupNo}
+		leg := TravelTimeLeg{fromPointType, fromPointNo, toPointType, toPointNo}
 
-		if _, ok := feed.TravelTimes[tGroup]; !ok {
-			feed.TravelTimes[tGroup] = make(map[uint64]int, 0)
+		if _, ok := feed.TravelTimes[group]; !ok {
+			feed.TravelTimes[group] = make(map[TravelTimeLeg]int)
 		}
-		feed.TravelTimes[tGroup][ft] = t
+		feed.TravelTimes[group][leg] = t
 	}
 	return nil
 }
@@ -448,12 +474,18 @@ func (feed *VDV452) parseShape(x10p *x10parser.X10Parser) (err error) {
 		pointType := uint64(feed.getInt("POINT_TO_LINK_TYPE", r, x10p.Cols))
 		order := uint64(feed.getInt("POINT_ON_LINK_SERIAL_NO", r, x10p.Cols))
 
-		ft := opDepNo *100000000000000000 +  fromPointType*100000000000000 + fromPointNo*100000000 + toPointType*1000000 + toPointNo
-
-		if _, ok := feed.Shapes[ft]; !ok {
-			feed.Shapes[ft] = make([]vdv452.ShapePoint, 0)
+		key := LinkKey{opDepNo, fromPointType, fromPointNo, toPointType, toPointNo}
+		if _, ok := feed.Shapes[key]; !ok {
+			feed.Shapes[key] = make([]vdv452.ShapePoint, 0)
 		}
-		feed.Shapes[ft] = append(feed.Shapes[ft], vdv452.ShapePoint{pointType, pointNo, order});
+		feed.Shapes[key] = append(feed.Shapes[key], vdv452.ShapePoint{pointType, pointNo, order})
+
+		// ft := opDepNo*100000000000000000 + fromPointType*100000000000000 + fromPointNo*100000000 + toPointType*1000000 + toPointNo
+
+		// if _, ok := feed.Shapes[ft]; !ok {
+		// 	feed.Shapes[ft] = make([]vdv452.ShapePoint, 0)
+		// }
+		// feed.Shapes[ft] = append(feed.Shapes[ft], vdv452.ShapePoint{pointType, pointNo, order})
 	}
 	return nil
 }
@@ -469,7 +501,7 @@ func (feed *VDV452) parseJourney(x10p *x10parser.X10Parser) (err error) {
 		j.JourneyType = (feed.getInt("JOURNEY_TYPE_NO", r, x10p.Cols))
 		j.TimingGroupNo = (feed.getInt("TIMING_GROUP_NO", r, x10p.Cols))
 
-		if (feed.getStr("BLOCK_NO", r, x10p.Cols) == "") {
+		if feed.getStr("BLOCK_NO", r, x10p.Cols) == "" {
 			j.BlockNo = 0
 		} else {
 			j.BlockNo = (feed.getInt("BLOCK_NO", r, x10p.Cols))
@@ -537,9 +569,8 @@ func (feed *VDV452) parseBlock(x10p *x10parser.X10Parser) (err error) {
 		bl.BlockNo = (feed.getInt("BLOCK_NO", r, x10p.Cols))
 		bl.VhTypeNo = (feed.getInt("VH_TYPE_NO", r, x10p.Cols))
 
-		id := bl.DayTypeNo*1000 + bl.BlockNo
-
-		feed.Blocks[uint64(id)] = bl
+		key := BlockKey{bl.DayTypeNo, bl.BlockNo}
+		feed.Blocks[key] = bl
 	}
 	return nil
 }
@@ -578,7 +609,6 @@ func (feed *VDV452) parseStopPoint(x10p *x10parser.X10Parser) (err error) {
 			}
 		}
 
-
 		feed.Stops[uint64(s.Point_Type)*7000000+uint64(s.Point_No)] = s
 	}
 	return nil
@@ -595,7 +625,6 @@ func (feed *VDV452) parseStop(x10p *x10parser.X10Parser) (err error) {
 		s.Stop_Abbr = feed.getStr("STOP_ABBR", r, x10p.Cols)
 		s.Stop_Desc = feed.getStr("STOP_DESC", r, x10p.Cols)
 
-
 		if feed.hasField("POINT_LATITUDE", r, x10p.Cols) && feed.hasField("POINT_LONGITUDE", r, x10p.Cols) {
 			lat := feed.getInt("POINT_LATITUDE", r, x10p.Cols)
 			lon := feed.getInt("POINT_LONGITUDE", r, x10p.Cols)
@@ -609,7 +638,7 @@ func (feed *VDV452) parseStop(x10p *x10parser.X10Parser) (err error) {
 			sEx.Point_Type = s.Point_Type
 			sEx.Point_No = s.Point_No
 			sEx.Point_Desc = s.Point_Desc
-			sEx.Stop_No =s.Stop_No
+			sEx.Stop_No = s.Stop_No
 			sEx.Stop_Type = s.Stop_Type
 			sEx.Stop_Abbr = s.Stop_Abbr
 			sEx.Stop_Desc = s.Stop_Desc
@@ -738,13 +767,13 @@ func (feed *VDV452) hasField(name string, row []string, cols map[string]int) boo
 		}
 	}
 	if idx, ok = cols[name]; !ok {
-		return false;
+		return false
 	}
 	if idx >= len(row) {
-		return false;
+		return false
 	}
 
-	return true;
+	return true
 }
 
 func (feed *VDV452) getInt(name string, row []string, cols map[string]int) int {
@@ -789,6 +818,5 @@ func (feed *VDV452) guessGtfsType(vn string) int {
 	}
 
 	fmt.Printf("Couldn't find vehicle type for vehicle '%s', defaulting to %d\n", vn, feed.DefaultMOT)
-
-	return 0;
+	return feed.DefaultMOT
 }
